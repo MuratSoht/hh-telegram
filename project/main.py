@@ -1,5 +1,6 @@
-from config import QUERIES
-from async_fetch import AsyncFetcher
+from config import PARAMS
+from async_module.async_fetch import AsyncFetcher
+from fetcher.hh_fetcher import HhFetcher
 import asyncio
 import aiohttp
 import time
@@ -8,25 +9,22 @@ async def main():
     async with aiohttp.ClientSession() as session:
         async_fetcher = AsyncFetcher()
         vacancyis_list_task = []
-        cnt2 = 0
-        for query in QUERIES:
-            params = {
-                "text": query,
-                "per_page": 100
-            }
-            vacancyis_list_task.append(asyncio.create_task(async_fetcher.fetch_vacancies(session, params)))
+        for params in PARAMS:
+            vacancyis_list_task.append(asyncio.create_task(async_fetcher.get_list_vacancies(session, params)))
         res = await asyncio.gather(*vacancyis_list_task)
-        id_list = []
-        for i in res:
-            for j in i:
-                id_list.append(j['id'])
-                vacancy_task = asyncio.create_task(async_fetcher.fetch_vacancy(session, j['id']))
-                vacancy = await vacancy_task
-                merged_dict = {**j, **vacancy}
-                if merged_dict.get('description') is None:
-                    cnt2+=1
-                print(merged_dict)
-        print(cnt2)
+        cnt = 0
+        for vacancy_query in res:
+            for vacancy in vacancy_query:
+                try:
+                    task = asyncio.wait_for(asyncio.create_task(async_fetcher.get_vacancy(session, vacancy.get('id'))), timeout=100)
+                    response_detail_vacancy = await task
+                    ready_data = HhFetcher(vacancy, response_detail_vacancy).get_state()
+                    print(ready_data)
+                    print()
+                    cnt+=1
+                except asyncio.TimeoutError:
+                    pass
+        print(cnt)
 if __name__ == '__main__':
     start = time.time()
     asyncio.run(main())
